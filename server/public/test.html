@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Test reset-client</title>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <h1>TEST PAGE JOUEUR</h1>
+    <p id="status">En attente du reset...</p>
+
+    <script>
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log("🔌 Connecté au serveur.");
+        });
+
+        socket.on('reset-client', () => {
+            console.log("✅ reset-client reçu !");
+            document.getElementById('status').textContent = "🎯 Réinitialisation reçue";
+        });
+    </script>
+</body>
+
+</html>

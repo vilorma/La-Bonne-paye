@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Joueur - La Bonne Paye</title>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <h1>Bienvenue joueur !</h1>
+
+    <div id="formulaire">
+        <label for="pseudo">Entrez votre pseudo :</label>
+        <input type="text" id="pseudo" placeholder="Ex: Jules" />
+        <button id="joinBtn">Rejoindre la partie</button>
+    </div>
+
+    <div id="jeu" style="display:none;">
+        <p>Bonjour <span id="nom"></span> !</p>
+        <button id="rollBtn" disabled>🎲 Lancer le dé</button>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Réutilisation du pseudo s'il existe déjà
+        const savedPseudo = localStorage.getItem('pseudo');
+        if (savedPseudo) {
+            socket.emit('register-player', { pseudo: savedPseudo });
+        }
+
+        // Envoi du pseudo au serveur
+        document.getElementById('joinBtn').addEventListener('click', () => {
+            const pseudo = document.getElementById('pseudo').value.trim();
+            if (pseudo === '') return alert("Veuillez entrer un pseudo !");
+            localStorage.setItem('pseudo', pseudo);
+            socket.emit('register-player', { pseudo });
+        });
+
+        // Confirmation d'enregistrement
+        socket.on('player-registered', (pseudo) => {
+            document.getElementById('formulaire').style.display = 'none';
+            document.getElementById('jeu').style.display = 'block';
+            document.getElementById('nom').textContent = pseudo;
+        });
+
+        // Gestion du tour par tour
+        socket.on('tour-actuel', ({ socketId, pseudo }) => {
+            const estMonTour = socket.id === socketId;
+            document.getElementById('rollBtn').disabled = !estMonTour;
+
+            if (estMonTour) {
+                console.log("🟢 C'est ton tour !");
+            } else {
+                console.log(`🔴 Tour de ${pseudo}`);
+            }
+        });
+
+        // Lancer de dé
+        document.getElementById('rollBtn').addEventListener('click', () => {
+            const dice = Math.floor(Math.random() * 6) + 1;
+            socket.emit('dice-roll', { value: dice });
+        });
+
+        // Réinitialisation depuis le plateau
+        socket.on('reset-client', () => {
+            localStorage.removeItem('pseudo');
+            document.getElementById('formulaire').style.display = 'block';
+            document.getElementById('jeu').style.display = 'none';
+            document.getElementById('pseudo').value = '';
+            document.getElementById('rollBtn').disabled = true;
+        });
+    </script>
+</body>
+
+</html>

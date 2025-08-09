@@ -1,0 +1,24 @@
+# --- Dépendances Node.js ---
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# --- Fichiers de logs ---
+logs
+*.log
+*.tmp
+
+# --- Fichiers système ---
+.DS_Store
+Thumbs.db
+
+# --- Variables d'environnement ---
+.env
+.env.local
+.env.*.local
+
+# --- Caches ---
+.cache/
+dist/
+build/
