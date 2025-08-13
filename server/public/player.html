@@ -50,21 +50,28 @@
             color: #b35300;
             font-weight: 600;
         }
+
+        .error {
+            color: #b00020;
+            font-weight: 600;
+        }
     </style>
 </head>
 
 <body>
-    <h1>Bienvenue joueur !</h1>
+    <h1>Joueur – La Bonne Paye</h1>
 
     <!-- Formulaire d'inscription -->
     <div id="formulaire" class="card">
+        <p id="counter" class="muted" style="margin:0 0 8px 0;">0 / 6 joueurs</p>
         <label for="pseudo">Entrez votre pseudo :</label>
         <input type="text" id="pseudo" placeholder="Ex: Jules" />
         <button id="joinBtn">Rejoindre la partie</button>
-        <p class="muted">Ton pseudo est mémorisé localement, mais l'inscription n'est plus automatique.</p>
+        <p class="muted">Limite : 6 joueurs. Pas de spectateurs.</p>
+        <p id="errorMsg" class="error" style="display:none;"></p>
     </div>
 
-    <!-- Zone de jeu -->
+    <!-- Zone de jeu (uniquement si inscrit) -->
     <div id="jeu" class="card" style="display:none;">
         <p>Bonjour <span id="nom"></span> !</p>
         <p>Tour : <span id="tour" class="warn">en attente…</span></p>
@@ -87,34 +94,37 @@
         const elPos = document.getElementById('pos');
         const elVisited = document.getElementById('visited');
         const rollBtn = document.getElementById('rollBtn');
+        const inputPseudo = document.getElementById('pseudo');
+        const errorMsg = document.getElementById('errorMsg');
+        const counterEl = document.getElementById('counter');
 
-        // --- Pré-remplissage mais PAS d'inscription auto ---
-        const savedPseudo = localStorage.getItem('pseudo');
-        if (savedPseudo) {
-            document.getElementById('pseudo').value = savedPseudo; // juste remplir le champ
-        }
+        // Champ pseudo VIDE à l'ouverture (pas de localStorage)
+        inputPseudo.value = '';
 
-        // Envoi du pseudo au serveur (inscription volontaire)
+        // Inscription volontaire
         document.getElementById('joinBtn').addEventListener('click', () => {
-            const pseudo = document.getElementById('pseudo').value.trim();
+            errorMsg.style.display = 'none';
+            const pseudo = inputPseudo.value.trim();
             if (!pseudo) return alert("Veuillez entrer un pseudo !");
-            localStorage.setItem('pseudo', pseudo);
             socket.emit('register-player', { pseudo });
         });
 
-        // Confirmation d'enregistrement
+        // Confirmation d'inscription
         socket.on('player-registered', (pseudo) => {
             elForm.style.display = 'none';
             elJeu.style.display = 'block';
             elNom.textContent = pseudo;
+            // le bouton restera désactivé jusqu'à 'tour-actuel'
+            rollBtn.disabled = true;
         });
 
-        // Refus d'inscription (pseudo déjà pris, etc.)
+        // Refus (partie pleine ou pseudo déjà pris)
         socket.on('register-denied', ({ reason }) => {
-            alert(reason || "Inscription refusée.");
+            errorMsg.textContent = reason || "Inscription refusée.";
+            errorMsg.style.display = 'block';
         });
 
-        // Gestion du tour par tour
+        // Tour par tour
         socket.on('tour-actuel', ({ socketId, pseudo }) => {
             const estMonTour = socket.id === socketId;
             rollBtn.disabled = !estMonTour;
@@ -122,54 +132,53 @@
             elTour.className = estMonTour ? 'ok' : 'warn';
         });
 
-        // Historique & position via players-state
-        socket.on('players-state', (players) => {
-            const me = getMe(players);
-            if (!me) return; // pas encore inscrit
+        // Normalisation du payload players-state
+        function normalizePlayersState(payload) {
+            if (Array.isArray(payload)) return { players: payload, count: payload.length, max: 6 };
+            return {
+                players: Array.isArray(payload.players) ? payload.players : [],
+                count: Number(payload.count) || 0,
+                max: Number(payload.max) || 6,
+            };
+        }
+
+        // État du jeu (compteur + mon état si inscrit)
+        socket.on('players-state', (payload) => {
+            const { players, count, max } = normalizePlayersState(payload);
+
+            // compteur X / max dans le formulaire
+            if (counterEl) counterEl.textContent = `${count} / ${max} joueurs`;
+
+            // n'afficher le jeu que si je suis inscrit (socket.id connu du serveur)
+            const me = players.find(p => p.socketId === socket.id) || null;
+            if (!me) return;
 
             elPos.textContent = me.position ?? 0;
             elVisited.textContent = (Array.isArray(me.visited) && me.visited.length)
                 ? me.visited.join(' → ')
                 : '—';
-
-            // Si on a un pseudo mémorisé et qu'on recharge, bascule l'UI si besoin
-            if (savedPseudo && elJeu.style.display === 'none') {
-                elForm.style.display = 'none';
-                elJeu.style.display = 'block';
-                elNom.textContent = savedPseudo;
-            }
         });
 
-        // Lancer de dé
+        // Lancer de dé — désactivation immédiate pour éviter les doubles clics
         rollBtn.addEventListener('click', () => {
+            rollBtn.disabled = true;
             const dice = Math.floor(Math.random() * 6) + 1;
             socket.emit('dice-roll', { value: dice });
         });
 
-        // Reset depuis le plateau
+        // Reset (depuis le plateau)
         socket.on('reset-client', () => {
-            localStorage.removeItem('pseudo');
             elForm.style.display = 'block';
             elJeu.style.display = 'none';
-            document.getElementById('pseudo').value = '';
+            inputPseudo.value = '';
             rollBtn.disabled = true;
             elVisited.textContent = '—';
             elPos.textContent = '0';
             elTour.textContent = 'en attente…';
             elTour.className = 'warn';
+            errorMsg.style.display = 'none';
+            if (counterEl) counterEl.textContent = `0 / 6 joueurs`;
         });
-
-        // --- Helpers ---
-        function getMe(players) {
-            // Essai 1 : par socketId (fiable)
-            let me = players.find(p => p.socketId === socket.id);
-            if (me) return me;
-
-            // Essai 2 : par pseudo mémorisé (utile si socket.id a changé avant la réponse)
-            const pseudo = localStorage.getItem('pseudo');
-            if (!pseudo) return null;
-            return players.find(p => p.pseudo === pseudo) || null;
-        }
     </script>
 </body>
 

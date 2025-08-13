@@ -1,11 +1,16 @@
 // src/players.js
 function snapshotPlayers(state) {
-  return Object.entries(state.players).map(([socketId, p]) => ({
+  const list = Object.entries(state.players).map(([socketId, p]) => ({
     socketId,
     pseudo: p.pseudo,
     position: p.position,
     visited: p.visited,
   }));
+  return {
+    players: list,
+    count: list.length,
+    max: state.MAX_PLAYERS, // ← on expose la limite côté serveur
+  };
 }
 
 function envoyerTourActuel(io, state) {
@@ -19,7 +24,15 @@ function envoyerTourActuel(io, state) {
 }
 
 function registerPlayer(io, state, socket, pseudo) {
-  const { players, playerOrder } = state;
+  const { players, playerOrder, MAX_PLAYERS } = state;
+
+  // Limite dure : 6 joueurs max
+  if (playerOrder.length >= MAX_PLAYERS) {
+    socket.emit("register-denied", {
+      reason: `Partie pleine (${MAX_PLAYERS} joueurs max).`,
+    });
+    return;
+  }
 
   // Pseudo unique
   const pseudoPris = Object.values(players).some((p) => p.pseudo === pseudo);

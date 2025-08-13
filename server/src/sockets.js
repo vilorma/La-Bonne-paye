@@ -20,14 +20,19 @@ function attachSockets(io, state) {
       registerPlayer(io, state, socket, pseudo);
     });
 
-    // Jet de dé
+    // Jet de dé (6 = rejoue)
     socket.on("dice-roll", ({ value }) => {
       const p = state.players[socket.id];
-      if (!p) return;
+      if (!p) {
+        console.log("⛔ dice-roll ignoré: socket non inscrit", socket.id);
+        return;
+      }
 
-      // Respect du tour
-      if (socket.id !== state.playerOrder[state.currentTurnIndex]) {
-        console.log(`⛔ ${p.pseudo} a tenté de jouer hors de son tour`);
+      const currentId = state.playerOrder[state.currentTurnIndex];
+      if (socket.id !== currentId) {
+        console.log(
+          `⛔ ${p.pseudo} a tenté de jouer hors de son tour (tour de ${state.players[currentId]?.pseudo})`
+        );
         return;
       }
 
@@ -37,9 +42,19 @@ function attachSockets(io, state) {
 
       console.log(`🎲 ${p.pseudo} a lancé ${value} → case ${p.position}`);
 
-      io.emit("dice-roll", { pseudo: p.pseudo, value }); // compat UI
-      io.emit("players-state", snapshotPlayers(state)); // source de vérité
+      // MAJ immédiate du plateau
+      io.emit("players-state", snapshotPlayers(state));
+      // Compat éventuelle
+      io.emit("dice-roll", { pseudo: p.pseudo, value });
 
+      // Règle : si 6 → rejoue (pas de changement d'index)
+      if (Number(value) === 6) {
+        console.log(`🔁 ${p.pseudo} rejoue (6)`);
+        envoyerTourActuel(io, state); // réactive son bouton
+        return;
+      }
+
+      // Sinon, tour suivant
       if (state.playerOrder.length > 0) {
         state.currentTurnIndex =
           (state.currentTurnIndex + 1) % state.playerOrder.length;
@@ -54,7 +69,7 @@ function attachSockets(io, state) {
       state.playerOrder = [];
       state.currentTurnIndex = 0;
       io.emit("update-players", []);
-      io.emit("players-state", []);
+      io.emit("players-state", snapshotPlayers(state));
       io.emit("reset-client");
     });
 
